@@ -1,0 +1,242 @@
+% 初始化参数
+Tmax = 600; % 总时间步数
+dt = 0.1; % 时间步长
+num_periods = 10; % 设置要模拟的周期数
+num_simulations = 100; % 模拟次数
+F1 = [0, 0, 981000]; % 重力
+% 存储多次模拟的结果
+all_simulated_positions = zeros(Tmax*num_periods, 3, num_simulations);
+%储存多次模拟的每个模拟周期末位置信息
+simulated_positions = zeros(num_periods, 3, num_simulations);
+% 初始位置和速度
+rng('shuffle');
+X0 = randi([1000, 9000]);
+Y0 = randi([1000, 9000]);
+Z0 = randi([0, 3000]);
+for sim = 1:num_simulations
+    % 存储单次模拟的位置和速度信息
+    all_positions = zeros(num_periods * Tmax, 3);
+    all_times = zeros(num_periods * Tmax, 1); % 存储时间信息
+    all_velocities = zeros(num_periods * Tmax, 3);
+    
+    time_index = 1; % 记录时间信息的索引
+    rng('shuffle');
+    F2 = -F1 * (1 - 0.05 * randn()); % 浮力
+    
+    for period = 1:num_periods
+        % 设置随机数发生器的种子为当前时间
+        rng('shuffle');
+        time_index = (period - 1) * Tmax +1;
+
+        % 第一个周期以外的周期使用上一个周期的最后预测结果作为初始值
+        if period > 1
+            position = all_positions(time_index - 1, :);
+            simulated_positions(period,:,sim)=all_positions(time_index - 1, :);
+            V = all_velocities(time_index - 1, :);
+            X0=position(1);
+            Y0=position(2);
+            Z0=position(3);
+        else
+            % 初始位置和速度
+           
+            position = [X0, Y0, Z0]; % 初始位置
+
+            % 定义均值和标准差
+            mu = 2; % 均值
+            sigma = 0.5; % 标准差
+            % 生成 0 到 1 之间的随机整数
+            random_integer = randi([0, 1]);
+
+            % 如果随机整数是 0，则返回 -1，否则返回 1
+            if random_integer == 0
+                result = -1;
+            else
+                result = 1;
+            end
+            Vx0 = result*(mu + sigma * randn(1, 1));
+            Vy0 = result*(mu + sigma * randn(1, 1));
+            Vz0 = result*(mu + sigma * randn(1, 1));
+            V = [Vx0, Vy0, Vz0]; % 初始速度
+        end
+
+        % 潜水器参数
+        Cd = 0.15;
+        B = 100; % 有效截面积
+        mass = 100000; % 质量
+        
+        
+        
+            %初始海水密度
+            T0 = 20;
+            S0 = 35;
+            T = T0 - Y0 / 100 * 0.3;
+            S = S0 + Z0 / 750;
+            P0 = 1025;
+            P = P0 * (1 - 0.00076 * (T - T0) + 0.00078 * (S - S0));
+
+            % 水流速度
+            if Z0 <= 2000
+                water_flow_speed = 0.8 - Z0 / 10000;
+            else
+                water_flow_speed = 0.4 + (3000 - Z0) / 5000;
+            end
+
+            % 水流方向向量
+            if Z0 <= 2000
+                water_flow_direction = [0; 1; 0];
+            else
+                if X0 <= 5000
+                    water_flow_direction = [0.707; 0.707; 0];
+                else 
+                    water_flow_direction = [0.707; -0.707; 0];
+                end
+            end
+            rng('shuffle');
+            Q1=0.1 * randn();
+            Q2=0.1 * randn();
+            Q3=0.1 * randn();
+            % 模拟潜水器运动
+            for t = 1:Tmax
+        
+
+                % 计算推进力
+                F3 = B * P * (dot(water_flow_direction, V) -abs(water_flow_speed) ).^2 * water_flow_speed ; % 推进力
+
+                % 计算阻力
+                F4 = -0.5 * P * B * Cd * norm(cross(V, water_flow_direction )).^2 * V;
+
+                % 计算合力
+                F = F1 + F2 + F3 + F4;
+        
+                F0=[F(1)*(1+Q1),F(2)*(1+Q2),F(3)*(1+Q3)];
+
+                % 计算加速度
+                acceleration = F0 / mass;
+
+                % 更新速度和位置
+                V = V + acceleration * dt;
+                position = position + V * dt;
+        
+                % 存储位置信息和时间信息
+                all_positions(time_index, :) = position;
+                all_times(time_index) = time_index * dt; % 记录时间信息
+                all_velocities(time_index, :) = V;
+        
+                % 更新时间索引
+                time_index = time_index + 1;
+            end
+        
+    end
+    
+    % 存储单次模拟的结果
+    all_simulated_positions(:, :, sim) = all_positions;
+end
+
+% 计算多次模拟的位置均值和标准差
+for i=1:period
+
+    mean_positions(i,:,:) = mean(simulated_positions(i,:,:), 2);
+    std_positions(i,:,:) = std(simulated_positions(i,:,:), 0, 2);
+    disp(mean_positions(i,:,:));
+    disp(std_positions(i,:,:));
+    % 绘制多次模拟的位置均值和标准差
+    
+end
+% 初始化一个二维数组，用于存储每个周期末位置的数据
+period_end_positions = cell(num_periods, num_simulations);
+
+for sim = 1:num_simulations
+    for period = 1:num_periods
+        % 将每个周期末位置存储到数组中
+        period_end_positions{period, sim} = simulated_positions(period, :, sim);
+    end
+end
+
+% 绘制每个周期末位置的密度图
+for period = 1:num_periods
+    % 初始化一个二维数组，用于存储每次模拟的周期末位置数据
+    end_positions_data = zeros(num_simulations, 3);
+    
+    % 提取每次模拟的周期末位置数据
+    for sim = 1:num_simulations
+        end_positions_data(sim, :) = period_end_positions{period, sim};
+    end
+    
+    % 计算核密度估计
+    [density, centers] = ksdensity(end_positions_data);
+    
+    % 绘制密度图
+    figure;
+    scatter3(end_positions_data(:, 1), end_positions_data(:, 2), end_positions_data(:, 3), 10, 'filled');
+    hold on;
+    [X_mesh, Y_mesh, Z_mesh] = meshgrid(centers(:, 1), centers(:, 2), centers(:, 3));
+    scatter3(X_mesh(:), Y_mesh(:), Z_mesh(:), 5, density(:), 'filled');
+    hold off;
+    xlabel('X');
+    ylabel('Y');
+    zlabel('Z');
+    title(['周期末位置分布密度图 - 第', num2str(period), '周期']);
+    colorbar;
+end
+
+
+
+% 系统参数
+dt = 0.1; % 时间步长
+A = eye(6); % 状态转移矩阵
+A(1:3, 4:6) = eye(3) * dt; % 状态转移矩阵
+H = [eye(3), zeros(3)]; % 观测矩阵
+Q = eye(6) * 0.01; % 过程噪声协方差矩阵
+R = eye(3) * 1; % 观测噪声协方差矩阵
+
+% 初始化初始状态估计和协方差矩阵
+x0 = [1000; 1000; 1000; 1; 1; 1]; % 初始状态
+P0 = eye(6); % 初始状态协方差矩阵
+
+% 初始化卡尔曼滤波结果变量
+x_est = zeros(6, Tmax); % 估计状态
+P_est = zeros(6, 6, Tmax); % 估计协方差
+
+% 初始状态估计
+x_est(:, 1) = x0;
+P_est(:, :, 1) = P0;
+
+% 实现卡尔曼滤波
+for k = 2:Tmax
+    % 预测步骤
+    x_pred = A * x_est(:, k-1); % 状态预测
+    P_pred = A * P_est(:, :, k-1) * A' + Q; % 协方差预测
+    
+    % 模拟观测值，假设位置和速度都能被观测到，并且存在噪声
+    simulated_position = all_positions(k, :)';
+    simulated_velocity = all_velocities(k, :)';
+    noisy_position = simulated_position + sqrtm(R) * randn(3, 1); % 添加观测噪声
+    noisy_velocity = simulated_velocity + sqrtm(R) * randn(3, 1); % 添加观测噪声
+    
+    % 更新步骤
+    K = P_pred * H' / (H * P_pred * H' + R); % 卡尔曼增益
+    x_est(:, k) = x_pred + K * ([noisy_position; noisy_velocity] - H * x_pred); % 状态更新
+    P_est(:, :, k) = (eye(6) - K * H) * P_pred; % 协方差更新
+end
+
+% 绘制卡尔曼滤波后的位置估计
+figure;
+subplot(3, 1, 1);
+plot(all_times, x_est(1, :), 'b-', 'LineWidth', 2);
+xlabel('Time');
+ylabel('X Position');
+title('Kalman Filter Estimate - X Position');
+
+subplot(3, 1, 2);
+plot(all_times, x_est(2, :), 'b-', 'LineWidth', 2);
+xlabel('Time');
+ylabel('Y Position');
+title('Kalman Filter Estimate - Y Position');
+
+subplot(3, 1, 3);
+plot(all_times, x_est(3, :), 'b-', 'LineWidth', 2);
+xlabel('Time');
+ylabel('Z Position');
+title('Kalman Filter Estimate - Z Position');
+
+
